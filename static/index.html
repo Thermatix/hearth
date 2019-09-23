@@ -411,6 +411,14 @@ function MetricProcessor() {
     };
 }
 
+function switchTo2m() {
+    window.conn.send('{"subscribe_to": "OverviewOneSecond"}');
+}
+
+function switchTo10m() {
+    window.conn.send('{"subscribe_to": "OverviewFiveSeconds"}');
+}
+
 $(function() {
     let conn = null;
     let metricRepository = new MetricProcessor();
@@ -420,14 +428,15 @@ $(function() {
     function connect() {
         disconnect();
         let wsUri = (window.location.protocol=='https:'&&'wss://'||'ws://')+window.location.host + '/ws/';
-        conn = new WebSocket(wsUri);
+        window.conn = new WebSocket(wsUri);
         console.log('Connecting...');
-        conn.onopen = function() {
+        window.conn.onopen = function() {
             console.log('Connected.');
             update_ui();
+            window.conn.send('{"subscribe_to": "OverviewOneSecond"}');
         };
 
-        conn.onmessage = function(e) {
+        window.conn.onmessage = function(e) {
             let message = JSON.parse(e.data);
             if (!message.hasOwnProperty("data")) {
                 return;
@@ -440,25 +449,25 @@ $(function() {
             }
             metricRepository.updateChart(hostname, message.type);
         };
-        conn.onclose = function() {
+        window.conn.onclose = function() {
             console.log('Disconnected.');
-            conn = null;
+            window.conn = null;
             console.log('Attempting to reconnect in 10 seconds');
             setTimeout(connect, 1000);
         };
     }
     function disconnect() {
-        if (conn != null) {
+        if (window.conn != null) {
             console.log('Disconnecting...');
-            conn.close();
-            conn = null;
+            window.conn.close();
+            window.conn = null;
         }
     }
     function update_ui() {
-        if (conn == null) {
+        if (window.conn == null) {
             console.log('disconnected');
         } else {
-            console.log('connected (' + conn.protocol + ')');
+            console.log('connected (' + window.protocol + ')');
         }
     }
 });
@@ -468,6 +477,8 @@ $(function() {
 <body style="color: #444444; font-size: 12px; font-family:sans-serif">
 <div style="color: #000000; margin-bottom: 1em">
   Machines: <span id="number-of-machines"></span>
+    <button onclick="switchTo2m()">2m</button>
+    <button onclick="switchTo10m()">10m</button>
 
   <div id="aggregate-charts" style="white-space:pre"></div>
     <br>

@@ -1,30 +1,51 @@
 use crate::metrics::aggregator::NodeMetrics;
+use crate::ws::server::Subscription;
 use std::collections::HashMap;
 
 pub struct MetricBuffer {
     limit: usize,
-    storage: Vec<NodeMetrics>,
+    storage_1s: Vec<NodeMetrics>,
+    samples_since_5s_rollup: u8,
+    storage_5s: Vec<NodeMetrics>,
 }
 
 impl MetricBuffer {
     pub fn new(limit: usize) -> MetricBuffer {
         MetricBuffer {
             limit,
-            storage: Vec::new(),
+            storage_1s: Vec::with_capacity(limit),
+            samples_since_5s_rollup: 0,
+            storage_5s: Vec::with_capacity(limit),
         }
     }
 
-    pub fn storage(&self) -> &Vec<NodeMetrics> {
-        &self.storage
+    pub fn storage(&self, timeframe: Subscription) -> &Vec<NodeMetrics> {
+        match timeframe {
+            Subscription::OverviewOneSecond => &self.storage_1s,
+            Subscription::OverviewFiveSeconds => &self.storage_5s,
+        }
     }
 
     pub fn push(&mut self, metrics: NodeMetrics) {
-        let length = self.storage.len();
+        let length = self.storage_1s.len();
         if length >= self.limit {
-            self.storage.drain(0..(length - self.limit));
+            self.storage_1s.drain(0..(length - self.limit));
         }
 
-        self.storage.push(metrics);
+        self.storage_1s.push(metrics);
+        self.samples_since_5s_rollup += 1;
+
+        // Rollup Begin
+        if self.samples_since_5s_rollup == 5 {
+            let metrics: Vec<NodeMetrics> = self.storage_1s.iter().cloned().rev().take(5).collect();
+            let rollup = NodeMetrics::aggregate_avg(metrics.clone());
+            let length = self.storage_5s.len();
+            if length >= self.limit {
+                self.storage_5s.drain(0..(length - self.limit));
+            }
+            self.storage_5s.push(rollup);
+            self.samples_since_5s_rollup = 0;
+        }
     }
 }
 
